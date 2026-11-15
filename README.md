@@ -1,0 +1,1 @@
+selam! ben eymenim bu ilk toolum lütfen kötüyse özür dilerim, eğer çalışırsa bildirirseniz çok sevinirim :D
