@@ -1,0 +1,118 @@
+#!/usr/bin/env python3
+import sys
+import socket
+from datetime import datetime
+import concurrent.futures
+
+def banner():
+    print(r"""
+    ███████╗███████╗██████╗ ██╗  ██╗██╗  ██╗
+    ╚══███╔╝██╔════╝██╔══██╗╚██╗██╔╝╚██╗██╔╝
+      ███╔╝ █████╗  ██████╔╝ ╚███╔╝  ╚███╔╝ 
+     ███╔╝  ██╔══╝  ██╔══██╗ ██╔██╗  ██╔██╗ 
+    ███████╗███████╗██║  ██║██╔╝ ██╗██╔╝ ██╗
+    v2.0 - Gelişmiş Ağ ve Servis Tarayıcısı
+    """)
+
+def scan_port(target_ip, port):
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(0.5)
+        result = s.connect_ex((target_ip, port))
+        if result == 0:
+            service = "bilinmiyor"
+            banner_text = ""
+            try:
+                service = socket.getservbyport(port)
+            except:
+                pass
+            
+            try:
+                if port in [80, 443, 8080]:
+                    s.sendall(b"HEAD / HTTP/1.0\r\n\r\n")
+                banner_data = s.recv(1024)
+                if banner_data:
+                    banner_text = banner_data.decode("utf-8", errors="ignore").strip().split("\n")[0]
+            except:
+                pass
+
+            result_str = f"[+] Port {port} ({service}) -> AÇIK"
+            if banner_text:
+                result_str += f" | Banner: {banner_text}"
+            print(result_str)
+            s.close()
+            return result_str
+        s.close()
+    except Exception:
+        pass
+    return None
+
+def main():
+    if len(sys.argv) == 1:
+        banner()
+        print("Kullanım: zerxx <hedef> [mod] [-o dosya.txt]")
+        print("Modlar:")
+        print("  1 -> Popüler Portlar (Çok Hızlı)")
+        print("  2 -> 1-1024 Arası Portlar (Standart)")
+        print("  3 -> 1-65535 Arası Tüm Portlar (Derin Tarama)")
+        sys.exit(1)
+
+    target_input = sys.argv[1]
+    mode = sys.argv[2] if len(sys.argv) > 2 and not sys.argv[2].startswith("-") else "1"
+    
+    output_file = None
+    if "-o" in sys.argv:
+        try:
+            output_file = sys.argv[sys.argv.index("-o") + 1]
+        except IndexError:
+            print("[-] Hata: -o parametresinden sonra dosya adı belirtilmedi.")
+            sys.exit(1)
+
+    banner()
+
+    try:
+        target_ip = socket.gethostbyname(target_input)
+    except socket.gaierror:
+        print(f"[-] Hata: Hedef çözümlenemedi -> {target_input}")
+        sys.exit(1)
+
+    print(f"[*] Hedef: {target_input} ({target_ip})")
+    print(f"[*] Çalışma Modu: {mode}")
+    print(f"[*] Başlangıç Zamanı: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print("-" * 60)
+
+    if mode == "1":
+        ports = [21, 22, 23, 25, 53, 80, 110, 135, 139, 443, 445, 1433, 3306, 3389, 8080]
+    elif mode == "2":
+        ports = range(1, 1025)
+    elif mode == "3":
+        ports = range(1, 65536)
+    else:
+        ports = [21, 22, 23, 25, 53, 80, 110, 443, 3306, 8080]
+
+    start_time = datetime.now()
+    open_ports = []
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=200) as executor:
+        futures = {executor.submit(scan_port, target_ip, p): p for p in ports}
+        for future in concurrent.futures.as_completed(futures):
+            res = future.result()
+            if res:
+                open_ports.append(res)
+
+    end_time = datetime.now()
+    print("-" * 60)
+    print(f"[*] Tarama Tamamlandı. Geçen Süre: {end_time - start_time}")
+
+    if output_file and open_ports:
+        try:
+            with open(output_file, "w", encoding="utf-8") as f:
+                f.write(f"Zerxx Tarama Raporu\nHedef: {target_input} ({target_ip})\nTarih: {datetime.now()}\n" + "-"*40 + "\n")
+                for op in open_ports:
+                    f.write(op + "\n")
+            print(f"[+] Sonuçlar başarıyla '{output_file}' dosyasına kaydedildi.")
+        except Exception as e:
+            print(f"[-] Dosya yazma hatası: {e}")
+
+if __name__ == "__main__":
+    main()
